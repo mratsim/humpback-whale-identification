@@ -23,6 +23,7 @@ if __name__ == "__main__":
     means = []
     stdevs = []
     for i in range(3):
+        # Data in format NHWC
         pixels = data[:,:,:,i].ravel()
         means.append(np.mean(pixels))
         stdevs.append(np.std(pixels))
