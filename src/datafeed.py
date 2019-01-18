@@ -55,6 +55,35 @@ class SimplePipeline(Pipeline):
     images = self.np(images)
     return images, labels
 
+class ValPipeline(Pipeline):
+  def __init__(self, img_dir, img_list_path, batch_size, crop_size, ch_mean, ch_std, num_threads, device_id, seed = 1234):
+    super(ValPipeline, self).__init__(batch_size, num_threads, device_id, seed = seed)
+    self.input = ops.FileReader(
+      file_root = img_dir, file_list = img_list_path,
+      random_shuffle = False, initial_fill = 2500
+    )
+    # self.decode = ops.nvJPEGDecoder(
+    #   device="mixed",
+    #   output_type=types.RGB,
+    #   use_batched_decode= True
+    #   )
+    self.decode = ops.HostDecoder()
+    self.res = ops.Resize(device="cpu", resize_shorter=crop_size)
+    self.cmnp = ops.CropMirrorNormalize(device="cpu",
+                                        output_dtype=types.FLOAT,
+                                        output_layout=types.NCHW,
+                                        crop=(crop_size, crop_size),
+                                        image_type=types.RGB,
+                                        mean=ch_mean,
+                                        std=ch_std)
+
+  def define_graph(self):
+    jpegs, labels = self.input(name = "Datafeed")
+    images = self.decode(jpegs)
+    images = self.res(images)
+    images = self.cmnp(images)
+    return images, labels
+
 if __name__ == "__main__":
   # help(ops.nvJPEGDecoder)
   help(ops)

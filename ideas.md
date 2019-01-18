@@ -36,6 +36,27 @@
 
 - Training from Scratch: https://arxiv.org/pdf/1811.08883.pdf
 
+# Loss function and optimizing directly for MAP
+
+- Can we do a differentiable Map@5?
+- Optimisation and Operations Research techniques
+  https://pdfs.semanticscholar.org/769b/67b5e953966524bdcbec657a0e44bdc62cba.pdf
+  - Linear Assignment Problem
+  - Nonsmooth optimization:
+    - Bundle method
+    - Stochastic Gradient Descent
+    - Constrained Quadrtic Programming
+  - SmoothGrad method
+  > The rationale is to compare our upper bound with an
+  > approximation of the ranking score to assess whether
+  > the approximation provides any benefit.  The basic idea is to perform a direct gradient
+  > descent optimization on a smoothed version of the NDCG measure
+- Scalable Learning of Non-Decomposable Objectives: https://arxiv.org/pdf/1608.04802.pdf
+- An Efficient Gradient-based Approach to Optimizing Average Precision Through Maximal Figure-of-Merit Learning:
+  https://www.researchgate.net/publication/257672531_An_Efficient_Gradient-based_Approach_to_Optimizing_Average_Precision_Through_Maximal_Figure-of-Merit_Learning (Paywalled ....)
+- A Maximal Figure-of-Merit Learning Approach to Maximizing Mean Average Precision with Deep Neural Network Based Classifiers
+  http://www.mirlab.org/conference_papers/international_conference/ICASSP%202014/papers/p4536-li.pdf
+
 # Learning rate
 
   - One-cycle Policy: https://arxiv.org/abs/1506.01186

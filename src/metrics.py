@@ -3,8 +3,8 @@
 
 import torch
 
-def map_at_5(predictions, ground_truth):
-  ## Mean Average Precision of a batch of predictions
+def ap_at_5(predictions, ground_truth):
+  ## Average Precision of a batch of predictions
   ## See: https://www.kaggle.com/pestipeti/explanation-of-map5-scoring-metric
   ## Input:
   ##   - A tensor of predictions as float probabilities of shape [Batch_size, Nb_of_Whale_IDs]
@@ -14,12 +14,15 @@ def map_at_5(predictions, ground_truth):
 
   _, pred_encoded_labels = torch.topk(predictions, 5) # returns (predictions, labels) in descending order
 
-  ap5 = torch.zeros(ground_truth.size()) # FloatTensor
+  ap5 = torch.zeros(ground_truth.size(), device = predictions.device) # Can be preallocated and reused if bottleneck
   for rank in range(5):
     # ap5 = if truth: 1/(rank+1) else: 0
     torch.add(ap5, 1./(rank+1), (pred_encoded_labels[:, rank]==ground_truth).float(), out=ap5) # ap5 += 1/rank * (pred[rank] == truth)
-  return torch.mean(ap5)
+  return ap5
 
+def map_at_5(predictions, ground_truth):
+  ## Mean Average Precision of a batch of predictions
+  return torch.mean(ap_at_5(predictions, ground_truth))
 
 # Sanity checks
 if __name__ == "__main__":

@@ -3,6 +3,8 @@
 
 # ############################################################
 #
+#                   Train valid split
+#                           &
 #     Format train.csv and sample_submission.csv for DALI
 #
 # ############################################################
@@ -46,6 +48,7 @@
 
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import StratifiedKFold
 import pickle
 
 print("Preprocessing input image paths and labels")
@@ -58,9 +61,25 @@ le = LabelEncoder()
 labels = le.fit_transform(df['Id'])
 print(labels[0:5])
 
-# Format input for DALI
+# Format full input for DALI
 df['Id'] = labels
-df.to_csv('./preprocessing/input_dali.txt', sep=' ', index=False, header=False)
+df.to_csv('./preprocessing/full_input_dali.txt', sep=' ', index=False, header=False)
+
+# Create a train/validation split.
+# DALI doesn't support PyTorch samplers so we can't create a train_test_split function 
+#
+# Dataset is extremely imbalanced
+# so we try to maintain the label distribution within folds with StratifiedKFolds.
+# Though we will retrain on the whole dataset for model to be submitted.
+# Due to the computational intensity, we will probably only use one-fold for validation
+
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1337)
+# Holding out 20% of an imbalanced dataset with many singletons is huge
+# but the test set is about 33% the size of the train set ...
+
+for i, (X_idx, y_idx) in enumerate(cv.split(df['Image'], df['Id'])):
+  df.iloc[X_idx].to_csv(f'./preprocessing/fold{i}_train.txt', sep=' ', index=False, header=False)
+  df.iloc[y_idx].to_csv(f'./preprocessing/fold{i}_val.txt', sep=' ', index=False, header=False)
 
 # Save the label encoder
 with open('./preprocessing/labelEncoder.pickle', 'wb') as fh:
@@ -68,6 +87,7 @@ with open('./preprocessing/labelEncoder.pickle', 'wb') as fh:
 
 del df
 del le
+del cv
 
 # For test we don't have labels but DALI expects 2-level of nesting like "base_dir/label/img.jpg"
 # so we will put dummy label instead

@@ -25,8 +25,9 @@ import pickle
 
 # local import
 from src.instrumentation import setup_logs
-from src.datafeed import SimplePipeline
-from src.training import train
+from src.datafeed import *
+from src.training import train, snapshot
+from src.validation import validate
 from src.net_squeezenet import *
 
 # ############################################################
@@ -45,14 +46,16 @@ random.seed(1337)
 
 SAVE_DIR = './snapshots' # Path for save intermediate and final weights of models
 TRAIN_DIR = './input/train'
-IMG_LIST = './preprocessing/input_dali.txt'
+TRAIN_IMG_LIST = './preprocessing/fold0_train.txt'
+VAL_IMG_LIST = './preprocessing/fold0_val.txt'
 LABEL_ENCODER = './preprocessing/labelEncoder.pickle'
 
 NUM_THREADS = 18
 DATA_AUGMENT_GPU = 1      # GPU used for data augmentation.
 
-EPOCHS = 3
+EPOCHS = 30
 BATCH_SIZE = 512          # This will be split onto all GPUs
+VAL_BATCH_SIZE = 256      # Not sure why I have enough mem in forward+backward and not in validation
 REPORT_EVERY_N_BATCH = 5
 
 # Normalization parameter (if pretrained, use the ones from ImageNet)
@@ -71,9 +74,9 @@ def main():
   #                     Processing pipeline
   #
   # ############################################################
-  pipe = SimplePipeline(
+  train_pipe = SimplePipeline(
     img_dir=TRAIN_DIR,
-    img_list_path=IMG_LIST,
+    img_list_path=TRAIN_IMG_LIST,
     batch_size=BATCH_SIZE,
     crop_size=224,
     ch_mean = NORM_MEAN,
@@ -82,16 +85,30 @@ def main():
     device_id = DATA_AUGMENT_GPU,
     seed = 1337
     )
-  pipe.build()
+  train_pipe.build()
 
-  # Data loader
-  train_loader = DALIClassificationIterator(pipe, size = pipe.epoch_size("Datafeed"))
+  val_pipe = ValPipeline(
+    img_dir=TRAIN_DIR,
+    img_list_path=VAL_IMG_LIST,
+    batch_size=VAL_BATCH_SIZE,
+    crop_size=224,
+    ch_mean = NORM_MEAN,
+    ch_std = NORM_STD,
+    num_threads = NUM_THREADS,
+    device_id = DATA_AUGMENT_GPU,
+    seed = 1337
+    )
+  train_pipe.build()
+
+  # Data loaders
+  train_loader = DALIClassificationIterator(train_pipe, size = train_pipe.epoch_size("Datafeed"))
+  val_loader = DALIClassificationIterator(val_pipe, size = train_pipe.epoch_size("Datafeed"))
 
   with open(LABEL_ENCODER, 'rb') as fh:
     le = pickle.load(fh)
 
   num_classes = le.classes_.size
-  logging.info(f"Found {num_classes} to classify.")
+  logger.info(f"Found {num_classes} unique classes to classify.")
 
   # I choose SqueezeNet for speed for the baseline
   model = SqueezeNetv1_1(le.classes_.size)
@@ -110,17 +127,33 @@ def main():
 
       # Train and validate
       train(epoch, train_loader, model, criterion, optimizer, BATCH_SIZE, REPORT_EVERY_N_BATCH)
+      score, loss = validate(epoch, val_loader, model, criterion)
 
-      # Reset data loader
+      # Save
+      is_best = score > best_score
+      best_score = max(score, best_score)
+      snapshot(SAVE_DIR, RUN_NAME, is_best,{
+          'epoch': epoch + 1,
+          'state_dict': model.state_dict(),
+          'best_score': best_score,
+          'optimizer': optimizer.state_dict(),
+          'val_loss': loss
+      })
+
+      # Cleanup
       train_loader.reset()
+      val_loader.reset()
 
+      end_epoch_timer = timer()
+      logger.info("#### End epoch {}, elapsed time: {}".format(epoch, end_epoch_timer - epoch_timer))
+      
   # ############################################################
   #
   #                     Cleanup
   #
   # ############################################################
   logging.shutdown()
-  # final_logfile = os.path.join('./outputs/', f'{str_timerun}--valid{val_score:.4f}.log')
-  # os.rename(tmp_logfile, final_logfile)
+  final_logfile = os.path.join('./outputs/', f'{str_timerun}--valid{val_score:.4f}.log')
+  os.rename(tmp_logfile, final_logfile)
 
 main()
