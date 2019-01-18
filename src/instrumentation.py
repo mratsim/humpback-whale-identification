@@ -1,3 +1,6 @@
+# Copyright (c) 2019 Mamy André-Ratsimbazafy
+# All rights reserved
+
 import logging
 import os
 from functools import wraps

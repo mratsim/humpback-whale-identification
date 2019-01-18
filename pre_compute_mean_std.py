@@ -1,3 +1,13 @@
+# Copyright (c) 2018-2019 Mamy André-Ratsimbazafy
+# All rights reserved
+
+# ############################################################
+#
+#                Compute the dataset per channel
+#                  mean and standard deviation
+#
+# ############################################################
+
 import cv2
 import numpy as np
 import pandas as pd

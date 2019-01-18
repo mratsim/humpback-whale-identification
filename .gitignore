@@ -1,3 +1,7 @@
 input/
 output/
 build/
+snapshots/
+preprocessing/
+*.pickle
+__pycache__/
