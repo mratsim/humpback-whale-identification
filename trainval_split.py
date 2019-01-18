@@ -63,7 +63,7 @@ print(labels[0:5])
 
 # Format full input for DALI
 df['Id'] = labels
-df.to_csv('./preprocessing/full_input_dali.txt', sep=' ', index=False, header=False)
+df.to_csv('./preprocessing/full_input.txt', sep=' ', index=False, header=False)
 
 # Create a train/validation split.
 # DALI doesn't support PyTorch samplers so we can't create a train_test_split function 

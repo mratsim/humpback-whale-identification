@@ -30,6 +30,23 @@ from src.training import train, snapshot
 from src.validation import validate
 from src.net_squeezenet import *
 
+# Command-line interface
+from argparse import ArgumentParser
+
+# ############################################################
+#
+#                           Parser
+#
+# ############################################################
+
+def parse_args():
+    parser = ArgumentParser(description="Train/Validate on fold."
+                                        " Train on full dataset."
+                                        " Predict using an existing weight.")
+    parser.add_argument('--fulldata', '-f', action='store_true',
+                         help='Train on the full dataset instead of fold 0')
+    return parser.parse_args()
+
 # ############################################################
 #
 #                     Environment variables
@@ -46,7 +63,8 @@ random.seed(1337)
 
 SAVE_DIR = './snapshots' # Path for save intermediate and final weights of models
 TRAIN_DIR = './input/train'
-TRAIN_IMG_LIST = './preprocessing/fold0_train.txt'
+TRAIN_FULL_IMG_LIST = './preprocessing/full_input.txt'
+TRAIN_FOLD_IMG_LIST = './preprocessing/fold0_train.txt'
 VAL_IMG_LIST = './preprocessing/fold0_val.txt'
 LABEL_ENCODER = './preprocessing/labelEncoder.pickle'
 
@@ -62,13 +80,16 @@ REPORT_EVERY_N_BATCH = 5
 NORM_MEAN = [0.6073162, 0.5655911, 0.528621]   # ImgNet [0.485, 0.456, 0.406]
 NORM_STD = [0.26327327, 0.2652084, 0.27765632] # ImgNet [0.229, 0.224, 0.225]
 
-RUN_NAME = time.strftime("%Y-%m-%d_%H%M-") + "BASELINE"
-TMP_LOGFILE = os.path.join('./outputs/', f'{RUN_NAME}--run-in-progress.log')
 
 def main():
   global_timer = timer()
+  args = parse_args()
+
+  RUN_NAME = time.strftime("%Y-%m-%d_%H%M-") + "BASELINE" + "-fulldata" if args.fulldata else ""
+  TMP_LOGFILE = os.path.join('./outputs/', f'{RUN_NAME}--run-in-progress.log')
+
   logger = setup_logs(TMP_LOGFILE)
-  
+
   # ############################################################
   #
   #                     Processing pipeline
@@ -76,7 +97,7 @@ def main():
   # ############################################################
   train_pipe = SimplePipeline(
     img_dir=TRAIN_DIR,
-    img_list_path=TRAIN_IMG_LIST,
+    img_list_path=TRAIN_FULL_IMG_LIST if args.fulldata else TRAIN_FOLD_IMG_LIST,
     batch_size=BATCH_SIZE,
     crop_size=224,
     ch_mean = NORM_MEAN,
@@ -86,23 +107,22 @@ def main():
     seed = 1337
     )
   train_pipe.build()
-
-  val_pipe = ValPipeline(
-    img_dir=TRAIN_DIR,
-    img_list_path=VAL_IMG_LIST,
-    batch_size=VAL_BATCH_SIZE,
-    crop_size=224,
-    ch_mean = NORM_MEAN,
-    ch_std = NORM_STD,
-    num_threads = NUM_THREADS,
-    device_id = DATA_AUGMENT_GPU,
-    seed = 1337
-    )
-  train_pipe.build()
-
-  # Data loaders
   train_loader = DALIClassificationIterator(train_pipe, size = train_pipe.epoch_size("Datafeed"))
-  val_loader = DALIClassificationIterator(val_pipe, size = train_pipe.epoch_size("Datafeed"))
+  
+  if not args.fulldata:
+    val_pipe = ValPipeline(
+      img_dir=TRAIN_DIR,
+      img_list_path=VAL_IMG_LIST,
+      batch_size=VAL_BATCH_SIZE,
+      crop_size=224,
+      ch_mean = NORM_MEAN,
+      ch_std = NORM_STD,
+      num_threads = NUM_THREADS,
+      device_id = DATA_AUGMENT_GPU,
+      seed = 1337
+      )
+    val_pipe.build()
+    val_loader = DALIClassificationIterator(val_pipe, size = val_pipe.epoch_size("Datafeed"))
 
   with open(LABEL_ENCODER, 'rb') as fh:
     le = pickle.load(fh)
@@ -127,22 +147,29 @@ def main():
 
       # Train and validate
       train(epoch, train_loader, model, criterion, optimizer, BATCH_SIZE, REPORT_EVERY_N_BATCH)
-      score, loss = validate(epoch, val_loader, model, criterion)
-
-      # Save
-      is_best = score > best_score
-      best_score = max(score, best_score)
-      snapshot(SAVE_DIR, RUN_NAME, is_best,{
-          'epoch': epoch + 1,
-          'state_dict': model.state_dict(),
-          'best_score': best_score,
-          'optimizer': optimizer.state_dict(),
-          'val_loss': loss
-      })
-
-      # Cleanup
       train_loader.reset()
-      val_loader.reset()
+
+      if not args.fulldata:
+        # Validate
+        score, loss = validate(epoch, val_loader, model, criterion)
+        val_loader.reset()
+
+        # Save
+        is_best = score > best_score
+        best_score = max(score, best_score)
+        snapshot(SAVE_DIR, RUN_NAME, is_best,{
+            'epoch': epoch + 1,
+            'state_dict': model.state_dict(),
+            'best_score': best_score,
+            'optimizer': optimizer.state_dict(),
+            'val_loss': loss
+        })
+      else:
+        snapshot(SAVE_DIR, RUN_NAME, True,{
+            'epoch': epoch + 1,
+            'state_dict': model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+        })
 
       end_epoch_timer = timer()
       logger.info("#### End epoch {}, elapsed time: {}".format(epoch, end_epoch_timer - epoch_timer))
@@ -153,7 +180,11 @@ def main():
   #
   # ############################################################
   logging.shutdown()
-  final_logfile = os.path.join('./outputs/', f'{str_timerun}--valid{val_score:.4f}.log')
-  os.rename(tmp_logfile, final_logfile)
+  if args.fulldata:
+    final_logfile = os.path.join('./outputs/', f'{RUN_NAME}.log')
+    os.rename(TMP_LOGFILE, final_logfile)
+  else:
+    final_logfile = os.path.join('./outputs/', f'{RUN_NAME}--best_val_score-{best_score:.4f}.log')
+    os.rename(TMP_LOGFILE, final_logfile)
 
 main()
