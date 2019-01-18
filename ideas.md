@@ -13,8 +13,11 @@
     - Siamese Networks: https://www.cs.cmu.edu/~rsalakhu/papers/oneshot1.pdf
     - Generative Adversarial Network
     - Triplet network
+      - https://omoindrot.github.io/triplet-loss
       - https://arxiv.org/abs/1412.6622
       - https://arxiv.org/abs/1804.07275v1
+      - http://openaccess.thecvf.com/content_ICCV_2017_workshops/papers/w6/Liao_Triplet-Based_Deep_Similarity_ICCV_2017_paper.pdf
+      - https://arxiv.org/pdf/1703.07737
       - Quadruplet Loss: https://arxiv.org/abs/1704.01719
       - Histogram Loss: https://arxiv.org/abs/1611.00822
 - Matching network: https://arxiv.org/abs/1606.04080
@@ -32,6 +35,11 @@
 - Multi stage with a segmentation/Region Proposal network and then a predictor on the crops
 
 - Training from Scratch: https://arxiv.org/pdf/1811.08883.pdf
+
+# Learning rate
+
+  - One-cycle Policy: https://arxiv.org/abs/1506.01186
+  - Super covnergence: https://arxiv.org/pdf/1708.07120.pdf and https://github.com/lnsmith54/super-convergence
 
 # Leaks
 
