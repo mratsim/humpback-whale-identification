@@ -63,7 +63,7 @@ df['Id'] = labels
 df.to_csv('./preprocessing/input_dali.txt', sep=' ', index=False, header=False)
 
 # Save the label encoder
-with open('labelEncoder.pickle', 'wb') as fh:
+with open('./preprocessing/labelEncoder.pickle', 'wb') as fh:
   pickle.dump(le, fh)
 
 del df
