@@ -47,7 +47,7 @@
 # in the format expected by DALI
 
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import M
 from sklearn.model_selection import StratifiedKFold
 import pickle
 
@@ -96,4 +96,4 @@ df = pd.read_csv('./input/sample_submission.csv')
 print(df.head())
 
 df['Id'] = -1
-df.to_csv('./preprocessing/test_dali.txt', sep=' ', index=False, header=False)
+df.to_csv('./preprocessing/test_data.txt', sep=' ', index=False, header=False)

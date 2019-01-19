@@ -23,12 +23,15 @@ from timeit import default_timer as timer
 import os
 import pickle
 
+# Output
+import pandas as pd
+
 # local import
 from src.instrumentation import setup_logs
 from src.datafeed import *
-from src.training import train, snapshot
-from src.validation import validate
 from src.net_squeezenet import *
+from src.training import train
+from src.prediction import predict, output
 
 # Command-line interface
 from argparse import ArgumentParser
@@ -43,8 +46,12 @@ def parse_args():
     parser = ArgumentParser(description="Train/Validate on fold."
                                         " Train on full dataset."
                                         " Predict using an existing weight.")
-    parser.add_argument('--fulldata', '-f', action='store_true',
+    parser.add_argument('--fulldata', '-fd', action='store_true',
                          help='Train on the full dataset instead of fold 0')
+    parser.add_argument('--predictonly', '-po', type=str, default=None,
+                         help='Predict only, using weights at the specified path.')
+    parser.add_argument('--dataparallel', '-dp', type=bool, default=True,
+                         help='Use DataParallel')       
     return parser.parse_args()
 
 # ############################################################
@@ -66,7 +73,13 @@ TRAIN_DIR = './input/train'
 TRAIN_FULL_IMG_LIST = './preprocessing/full_input.txt'
 TRAIN_FOLD_IMG_LIST = './preprocessing/fold0_train.txt'
 VAL_IMG_LIST = './preprocessing/fold0_val.txt'
-LABEL_ENCODER = './preprocessing/labelEncoder.pickle'
+LABEL_ENCODER_PATH = './preprocessing/labelEncoder.pickle'
+
+TEST_DIR = './input/test'
+TEST_IMG_LIST = './preprocessing/test_data.txt'
+SUBMISSION_FILE = './input/sample_submission.csv'
+
+LOG_SUFFIX = "baseline"
 
 NUM_THREADS = 18
 DATA_AUGMENT_GPU = 1      # GPU used for data augmentation.
@@ -80,16 +93,13 @@ REPORT_EVERY_N_BATCH = 5
 NORM_MEAN = [0.6073162, 0.5655911, 0.528621]   # ImgNet [0.485, 0.456, 0.406]
 NORM_STD = [0.26327327, 0.2652084, 0.27765632] # ImgNet [0.229, 0.224, 0.225]
 
+with open(LABEL_ENCODER_PATH, 'rb') as fh:
+  LABEL_ENCODER = pickle.load(fh)
 
-def main():
-  global_timer = timer()
-  args = parse_args()
+# I choose SqueezeNet for speed for the baseline
+model = SqueezeNetv1_1(LABEL_ENCODER.classes_.size)
 
-  RUN_NAME = time.strftime("%Y-%m-%d_%H%M-") + "BASELINE" + "-fulldata" if args.fulldata else ""
-  TMP_LOGFILE = os.path.join('./outputs/', f'{RUN_NAME}--run-in-progress.log')
-
-  logger = setup_logs(TMP_LOGFILE)
-
+def main_train(model, args, run_name, global_timer):
   # ############################################################
   #
   #                     Processing pipeline
@@ -124,67 +134,78 @@ def main():
     val_pipe.build()
     val_loader = DALIClassificationIterator(val_pipe, size = val_pipe.epoch_size("Datafeed"))
 
-  with open(LABEL_ENCODER, 'rb') as fh:
-    le = pickle.load(fh)
-
-  num_classes = le.classes_.size
+  num_classes = LABEL_ENCODER.classes_.size
   logger.info(f"Found {num_classes} unique classes to classify.")
 
-  # I choose SqueezeNet for speed for the baseline
-  model = SqueezeNetv1_1(le.classes_.size)
-  model = DataParallel(model).cuda()
   optimizer = optim.Adam(model.parameters())
   criterion = nn.CrossEntropyLoss()
 
-  # ############################################################
-  #
-  #                     Training
-  #
-  # ############################################################
-  best_score = 0.
-  for epoch in range(EPOCHS):
-      epoch_timer = timer()
+  train(
+    model = model, train_loader = train_loader,
+    criterion = criterion, optimizer = optimizer,
+    batch_size = BATCH_SIZE, epochs = EPOCHS,
+    report_freq = REPORT_EVERY_N_BATCH,
+    snapshot_dir = SAVE_DIR,
+    run_name = run_name,
+    data_parallel = args.dataparallel,
+    evaluate = not args.fulldata,
+    val_loader = None if args.fulldata else val_loader,
+  )
 
-      # Train and validate
-      train(epoch, train_loader, model, criterion, optimizer, BATCH_SIZE, REPORT_EVERY_N_BATCH)
-      train_loader.reset()
+def main_predict(model):
+  test_pipe = ValPipeline(
+      img_dir=TEST_DIR,
+      img_list_path=TEST_IMG_LIST,
+      batch_size=VAL_BATCH_SIZE,
+      crop_size=224,
+      ch_mean = NORM_MEAN,
+      ch_std = NORM_STD,
+      num_threads = NUM_THREADS,
+      device_id = DATA_AUGMENT_GPU,
+      seed = 1337
+      )
+  test_pipe.build()
+  test_loader = DALIClassificationIterator(test_pipe, size = test_pipe.epoch_size("Datafeed"))
+  return predict(test_loader, model)
 
-      if not args.fulldata:
-        # Validate
-        score, loss = validate(epoch, val_loader, model, criterion)
-        val_loader.reset()
+def main(model):
+  global_timer = timer()
+  args = parse_args()
 
-        # Save
-        is_best = score > best_score
-        best_score = max(score, best_score)
-        snapshot(SAVE_DIR, RUN_NAME, is_best,{
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_score': best_score,
-            'optimizer': optimizer.state_dict(),
-            'val_loss': loss
-        })
-      else:
-        snapshot(SAVE_DIR, RUN_NAME, True,{
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
-        })
-
-      end_epoch_timer = timer()
-      logger.info("#### End epoch {}, elapsed time: {}".format(epoch, end_epoch_timer - epoch_timer))
-      
-  # ############################################################
-  #
-  #                     Cleanup
-  #
-  # ############################################################
-  logging.shutdown()
-  if args.fulldata:
-    final_logfile = os.path.join('./outputs/', f'{RUN_NAME}.log')
-    os.rename(TMP_LOGFILE, final_logfile)
+  if args.dataparallel:
+    model = DataParallel(model).cuda()
   else:
-    final_logfile = os.path.join('./outputs/', f'{RUN_NAME}--best_val_score-{best_score:.4f}.log')
-    os.rename(TMP_LOGFILE, final_logfile)
+    model = model.cuda()
 
-main()
+  model_weights_path = ''
+  if args.predictonly:
+    # Pretrained
+    run_name = time.strftime("%Y-%m-%d_%H%M-") + LOG_SUFFIX + ("-fulldata" if args.fulldata else "")
+    tmp_logfile = os.path.join('./outputs/', f'{run_name}--run-in-progress.log')
+
+    logger = setup_logs(tmp_logfile)
+    model_weights_path = args.predictonly
+
+  else:
+    # Training
+    run_name = time.strftime("%Y-%m-%d_%H%M-") + f"{LOG_SUFFIX}-predictonly"
+    tmp_logfile = os.path.join('./outputs/', f'{run_name}--run-in-progress.log')
+
+    logger = setup_logs(tmp_logfile)
+    model_weights_path = main_train(args, run_name, global_timer)
+
+  # Load model
+  logger.info(f'===> loading model for prediction: {model_weights_path}')
+  checkpoint = torch.load(model_weights_path)
+  model.load_state_dict(checkpoint['state_dict'])
+
+  # Predict
+  pred = main_predict(model)
+
+  # Output
+  X_test = pd.read_csv(SUBMISSION_FILE)
+  output(pred, X_test, LABEL_ENCODER, SAVE_DIR, run_name)
+
+  logging.shutdown()
+
+main(model)

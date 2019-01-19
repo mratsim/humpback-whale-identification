@@ -26,16 +26,16 @@ def validate(epoch,valid_loader,model,loss_func):
     batch_count = 1
     
     logger.info("Starting Validation")
-    for batch_idx, data_target in enumerate(tqdm(valid_loader)):
-        
-        data = data_target[0]["data"]
-        target = data_target[0]["label"].squeeze().type(torch.cuda.LongTensor)
-    
-        pred = model(data)
-        
-        total_loss += loss_func(pred,target).item()
-        total_map5 += map_at_5(pred, target).item()
-        batch_count += 1
+    with torch.no_grad():
+      for batch_idx, data_target in enumerate(tqdm(valid_loader)):    
+          data = data_target[0]["data"]
+          target = data_target[0]["label"].squeeze().type(torch.cuda.LongTensor)
+      
+          pred = model(data)
+          
+          total_loss += loss_func(pred,target).item()
+          total_map5 += map_at_5(pred, target).item()
+          batch_count += 1
     
     avg_loss = total_loss / valid_loader._size
     map5 = total_map5 / batch_count

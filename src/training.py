@@ -10,6 +10,7 @@
 import torch
 import os
 import logging
+from src.validation import validate
 
 ## Get the same logger from main"
 logger = logging.getLogger("humpback-whale")
@@ -26,7 +27,7 @@ def lr_scheduler(optimizer, epoch, init_lr=0.01, lr_decay_epoch=7):
 
     return optimizer
 
-def train(epoch,train_loader,model,loss_func,optimizer, batch_size, report_freq):
+def train_at_epoch(epoch, train_loader, model, loss_func, optimizer, batch_size, report_freq):
     model.train() # training mode (build graph)
     optimizer = lr_scheduler(optimizer, epoch)
     
@@ -50,3 +51,62 @@ def snapshot(dir_path, run_name, is_best, state):
     if is_best:
         torch.save(state, snapshot_file)
         logger.info(f"Snapshot saved to {snapshot_file}")
+
+def train(
+    model, train_loader,
+    criterion, optimizer,
+    batch_size, epochs, report_freq,
+    snapshot_dir, run_name,
+    data_parallel,
+    evaluate, val_loader=None):
+  best_score = 0.
+  for epoch in range(epochs):
+      epoch_timer = timer()
+
+      # Train and validate
+      train_at_epoch(epoch, train_loader, model, criterion, optimizer, batch_size, report_freq)
+      train_loader.reset()
+
+      if not args.fulldata:
+        # Validate
+        score, loss = validate(epoch, val_loader, model, criterion)
+        val_loader.reset()
+
+        # Save
+        is_best = score > best_score
+        best_score = max(score, best_score)
+        snapshot(snapshot_dir, run_name, is_best,{
+            'epoch': epoch + 1,
+            'state_dict': model.module.state_dict() if data_parallel else model.state_dict(),
+            'best_score': best_score,
+            'optimizer': optimizer.module.state_dict() if data_parallel else model.state_dict(),
+            'val_loss': loss
+        })
+      else:
+        snapshot(snapshot_dir, run_name, True,{
+            'epoch': epoch + 1,
+            'state_dict': model.state_dict() if data_parallel else model.state_dict(),
+            'optimizer': optimizer.state_dict() if data_parallel else model.state_dict(),
+        })
+
+      end_epoch_timer = timer()
+      logger.info("#### End epoch {}, elapsed time: {}".format(epoch, end_epoch_timer - epoch_timer))
+      
+  # ############################################################
+  #
+  #                     Cleanup
+  #
+  # ############################################################
+  
+  if args.fulldata:
+    final_logfile = os.path.join('./outputs/', f'{run_name}.log')
+    os.rename(TMP_LOGFILE, final_logfile)
+  else:
+    final_logfile = os.path.join('./outputs/', f'{run_name}--best_val_score-{best_score:.4f}.log')
+    os.rename(TMP_LOGFILE, final_logfile)
+
+  end_time = timer()
+  logger.info("   ===>  Training success!")
+  logger.info("         Total training time: %s" % (end_time - global_timer))
+
+  return os.path.join(SAVE_DIR, run_name + '-model_best.pth')
