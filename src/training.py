@@ -11,6 +11,8 @@ import torch
 import os
 import logging
 from src.validation import validate
+from src.instrumentation import logspeed
+from timeit import default_timer as timer
 
 ## Get the same logger from main"
 logger = logging.getLogger("humpback-whale")
@@ -52,6 +54,7 @@ def snapshot(dir_path, run_name, is_best, state):
         torch.save(state, snapshot_file)
         logger.info(f"Snapshot saved to {snapshot_file}")
 
+@logspeed
 def train(
     model, train_loader,
     criterion, optimizer,
@@ -67,7 +70,7 @@ def train(
       train_at_epoch(epoch, train_loader, model, criterion, optimizer, batch_size, report_freq)
       train_loader.reset()
 
-      if not args.fulldata:
+      if evaluate:
         # Validate
         score, loss = validate(epoch, val_loader, model, criterion)
         val_loader.reset()
@@ -79,34 +82,17 @@ def train(
             'epoch': epoch + 1,
             'state_dict': model.module.state_dict() if data_parallel else model.state_dict(),
             'best_score': best_score,
-            'optimizer': optimizer.module.state_dict() if data_parallel else model.state_dict(),
+            'optimizer': optimizer.state_dict(),
             'val_loss': loss
         })
       else:
         snapshot(snapshot_dir, run_name, True,{
             'epoch': epoch + 1,
-            'state_dict': model.state_dict() if data_parallel else model.state_dict(),
-            'optimizer': optimizer.state_dict() if data_parallel else model.state_dict(),
+            'state_dict': model.module.state_dict() if data_parallel else model.state_dict(),
+            'optimizer': optimizer.state_dict()
         })
 
       end_epoch_timer = timer()
       logger.info("#### End epoch {}, elapsed time: {}".format(epoch, end_epoch_timer - epoch_timer))
-      
-  # ############################################################
-  #
-  #                     Cleanup
-  #
-  # ############################################################
-  
-  if args.fulldata:
-    final_logfile = os.path.join('./outputs/', f'{run_name}.log')
-    os.rename(TMP_LOGFILE, final_logfile)
-  else:
-    final_logfile = os.path.join('./outputs/', f'{run_name}--best_val_score-{best_score:.4f}.log')
-    os.rename(TMP_LOGFILE, final_logfile)
 
-  end_time = timer()
-  logger.info("   ===>  Training success!")
-  logger.info("         Total training time: %s" % (end_time - global_timer))
-
-  return os.path.join(SAVE_DIR, run_name + '-model_best.pth')
+  return os.path.join(snapshot_dir, run_name + '-model_best.pth')

@@ -14,6 +14,7 @@ import torch.nn.functional as F
 import pandas as pd
 from tqdm import tqdm
 import os
+from src.instrumentation import logspeed
 
 ## Get the same logger from main"
 logger = logging.getLogger("humpback-whale")
@@ -38,6 +39,7 @@ def predict(test_loader, model):
   logger.info(result)
   return result
 
+@logspeed
 def output(predictions, X_test, label_encoder, dir_path, run_name):
   result = pd.DataFrame({
     'Image': X_test['Image'],

@@ -2,10 +2,11 @@ from src.datafeed import SimplePipeline
 from timeit import default_timer as timer
 
 TRAIN_DIR = './input/train'
-IMG_LIST = './preprocessing/input_dali.txt'
+IMG_LIST = './preprocessing/full_input.txt'
 
 NUM_THREADS = 18
-DATA_AUGMENT_GPU = 1
+DATA_AUGMENT_USE_GPU = True
+DATA_AUGMENT_GPU_DEVICE = 1
 
 BATCH_SIZE = 256
 
@@ -24,7 +25,8 @@ def speedtest():
       ch_mean = NORM_MEAN,
       ch_std = NORM_STD,
       num_threads = NUM_THREADS,
-      device_id = DATA_AUGMENT_GPU,
+      use_gpu = DATA_AUGMENT_USE_GPU,
+      gpu_id = DATA_AUGMENT_GPU_DEVICE,
       seed = 1337
     )
     pipe.build()
