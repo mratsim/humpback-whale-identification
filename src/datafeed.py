@@ -20,7 +20,7 @@ class SimplePipeline(Pipeline):
     super(SimplePipeline, self).__init__(batch_size, num_threads, gpu_id, seed = seed)
     self.input = ops.FileReader(
       file_root = img_dir, file_list = img_list_path,
-      random_shuffle = True, initial_fill = batch_size * 3 # This seems to use reservoir sampling
+      random_shuffle = True, initial_fill = batch_size * 2 # This seems to use reservoir sampling
     )
     # On my workstation CPU is faster (4.5kimg/s vs 3.0kimg/s)
     # A squeezenet pipeline takes 50s instead of 53s to run 3 epochs

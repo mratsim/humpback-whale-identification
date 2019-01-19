@@ -82,14 +82,20 @@ OUT_DIR = './outputs'
 
 NUM_THREADS = 18
 
-EPOCHS = 30
-BATCH_SIZE = 96          # This will be split onto all GPUs
-VAL_BATCH_SIZE = 256     # We can use large batches when weights are frozen
+EPOCHS = 25
+BATCH_SIZE = 192          # This will be split onto all GPUs
+VAL_BATCH_SIZE = 256      # We can use large batches when weights are frozen
 REPORT_EVERY_N_BATCH = 5
 
-PRETRAINED = True
+PRETRAINED = False
 UNFROZE_AT_EPOCH = 3
-BATCH_FROZEN = 256       # We can use large batches when weights are frozen
+BATCH_FROZEN = 256        # We can use large batches when weights are frozen
+
+# GPU data augmentation
+# Note that it's probably better to do augmentation on CPU for compute intensive models
+# So that you can maximize the batch size and training on GPU.
+DATA_AUGMENT_USE_GPU = True
+DATA_AUGMENT_GPU_DEVICE = 0
 
 if PRETRAINED:
   # ImgNet normalization
@@ -97,29 +103,48 @@ if PRETRAINED:
   NORM_STD = [0.229, 0.224, 0.225]
 else:
   # Dataset normalization parameter
-  NORM_MEAN = [0.6073162, 0.5655911, 0.528621]   # ImgNet [0.485, 0.456, 0.406]
-  NORM_STD = [0.26327327, 0.2652084, 0.27765632] # ImgNet [0.229, 0.224, 0.225]
+  NORM_MEAN = [0.6073162, 0.5655911, 0.528621]
+  NORM_STD = [0.26327327, 0.2652084, 0.27765632]
 
 with open(LABEL_ENCODER_PATH, 'rb') as fh:
   LABEL_ENCODER = pickle.load(fh)
 
-model = initialize_model(
-  model_family = 'resnet',
-  model_name = 'resnet101',
-  num_classes = LABEL_ENCODER.classes_.size,
-  frozen_weights = PRETRAINED,
-  use_pretrained = PRETRAINED
-  )
-LOG_SUFFIX = "resnet101-baseline"
+CRITERION = nn.CrossEntropyLoss
+FINAL_ACTIVATION = lambda x: torch.softmax(x, dim=1)
 
-# GPU data augmentation
-# Note that it's probably better to do augmentation on CPU for compute intensive models
-# So that you can maximize the batch size and training on GPU.
-DATA_AUGMENT_USE_GPU = True
-DATA_AUGMENT_GPU_DEVICE = 1
+model_family = 'resnet'
+model_name = 'resnet34'
+def gen_model_and_optimizer(data_parallel, weights = None):
+  # Delay generating model, so that:
+  #   - it can be collected if needed
+  #   - DataParallel doesn't causes issue when loading a saved model
+  model, feature_extractor, classifier = initialize_model(
+    model_family = model_family,
+    model_name = model_name,
+    num_classes = LABEL_ENCODER.classes_.size,
+    frozen_weights = PRETRAINED,
+    use_pretrained = PRETRAINED,
+    data_parallel = data_parallel,
+    weights = weights
+  )
+
+  optimizer = optim.Adam(feature_extractor, lr = 0.01)
+  optimizer.add_param_group({
+    'params': classifier,
+    'lr': 0.001
+  })
+
+  # Make sure if there is a reference issue we see it ASAP
+  del feature_extractor
+  del classifier
+
+  return model, optimizer
+
+init = "pretrained" if PRETRAINED else "from-scratch"
+LOG_SUFFIX = f"{model_name}-{init}-baseline"
 
 @logspeed
-def main_train(model, args, run_name, logger):
+def main_train(args, run_name, logger):
   # ############################################################
   #
   #                     Processing pipeline
@@ -156,14 +181,15 @@ def main_train(model, args, run_name, logger):
     val_pipe.build()
     val_loader = DALIClassificationIterator(val_pipe, size = val_pipe.epoch_size("Datafeed"))
 
+  model, optimizer = gen_model_and_optimizer(args.dataparallel)
+
   num_classes = LABEL_ENCODER.classes_.size
   logger.info(f"Found {num_classes} unique classes to classify.")
   model_name = model.module.__class__.__name__ if args.dataparallel else model.__class__.__name__
 
-  # optimizer = optim.Adam(model.parameters())
-  optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9, weight_decay=0.0005)
+  logger.info(f"Optimizer initial configuration:\n{optimizer}")
 
-  criterion = nn.CrossEntropyLoss()
+  criterion = CRITERION()
 
   # If network is pretrained, we need to freeze feature layers
   # first so that the classifier adapt to their output range
@@ -196,7 +222,7 @@ def main_train(model, args, run_name, logger):
       evaluate = not args.fulldata,
       val_loader = None if args.fulldata else val_loader,
     )
-    logger.info(f"End pretraining, unfroze all weights.")
+    logger.info(f"End pretraining, unfroze all weights.\n")
 
   logger.info(f"Training {model.module.__class__.__name__} with batch size {BATCH_SIZE} for {EPOCHS} epochs.")
   weights = train(
@@ -228,17 +254,13 @@ def main_predict(model):
       )
   test_pipe.build()
   test_loader = DALIClassificationIterator(test_pipe, size = test_pipe.epoch_size("Datafeed"))
-  return predict(test_loader, model)
+  return predict(test_loader, model, FINAL_ACTIVATION)
 
 @logspeed
-def main(model):
+def main():
   args = parse_args()
 
-  if args.dataparallel:
-    model = DataParallel(model).cuda()
-  else:
-    model = model.cuda()
-
+  best_score=None
   model_weights_path = ''
   if args.predictonly:
     # Pretrained
@@ -254,12 +276,13 @@ def main(model):
     tmp_logfile = os.path.join(OUT_DIR, f'{run_name}--run-in-progress.log')
 
     logger = setup_logs(tmp_logfile)
-    model_weights_path = main_train(model, args, run_name, logger)
+
+    model_weights_path, best_score = main_train(args, run_name, logger)
 
   # Load model
   logger.info(f'===> loading model for prediction: {model_weights_path}')
   checkpoint = torch.load(model_weights_path)
-  model.load_state_dict(checkpoint['state_dict'])
+  model, _ = gen_model_and_optimizer(args.dataparallel, weights = checkpoint['state_dict'])
 
   # Predict
   pred = main_predict(model)
@@ -274,13 +297,13 @@ def main(model):
   #
   # ############################################################
 
-  if evaluate:
-    final_logfile = os.path.join('./outputs/', f'{run_name}.log')
-    os.rename(TMP_LOGFILE, final_logfile)
-  else:
+  if best_score: # Prediction only of full dataset training
     final_logfile = os.path.join('./outputs/', f'{run_name}--best_val_score-{best_score:.4f}.log')
-    os.rename(TMP_LOGFILE, final_logfile)
+    os.rename(tmp_logfile, final_logfile)
+  else:
+    final_logfile = os.path.join('./outputs/', f'{run_name}.log')
+    os.rename(tmp_logfile, final_logfile)
   logger.info("   ===>  Finished all tasks!")
 
-main(model)
+main()
 logging.shutdown()

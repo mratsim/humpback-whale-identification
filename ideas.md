@@ -60,7 +60,9 @@
 # Learning rate
 
   - One-cycle Policy: https://arxiv.org/abs/1506.01186
-  - Super covnergence: https://arxiv.org/pdf/1708.07120.pdf and https://github.com/lnsmith54/super-convergence
+  - Super convergence: https://arxiv.org/pdf/1708.07120.pdf and https://github.com/lnsmith54/super-convergence
+  - SGDR Stochastic gradient descent with restart: sudden increase of LR to hop out of local minima
+    https://arxiv.org/pdf/1608.03983.pdf
 
 # Leaks
 

@@ -7,7 +7,7 @@
 #
 # ############################################################
 
-
+import numpy as np
 import torch
 import logging
 import torch.nn.functional as F
@@ -21,7 +21,7 @@ logger = logging.getLogger("humpback-whale")
 
 ##################################################
 #### Prediction function
-def predict(test_loader, model):
+def predict(test_loader, model, final_activation):
   model.eval()
   predictions = [] # Store predictions on CPU, we don't have enough GPU mem
 
@@ -30,17 +30,22 @@ def predict(test_loader, model):
     for batch_idx, data_target in enumerate(tqdm(test_loader)):
       data = data_target[0]["data"]
 
-      pred = model(data)
-      _, pred_encoded_labels = torch.topk(pred, 5)
-      predictions.append(pred_encoded_labels.cpu())
+      pred = final_activation(model(data))
+      predictions.append(pred.cpu())
 
   result = torch.cat(predictions, 0)
-  logger.info("===> Predictions done. Here is a snippet (encoded labels)")
+  logger.info("===> Predictions done. Here is a snippet (label probabilities)")
   logger.info(result)
   return result
 
 @logspeed
-def output(predictions, X_test, label_encoder, dir_path, run_name):
+def output(raw_predictions, X_test, label_encoder, dir_path, run_name):
+  raw_pred_path = os.path.join(dir_path, run_name + '-raw-pred.csv')
+  np.savetxt(raw_pred_path, raw_predictions,delimiter=";")
+  logger.info("Raw predictions saved to {}".format(raw_pred_path))
+  
+  _, predictions = torch.topk(raw_predictions, 5)
+
   result = pd.DataFrame({
     'Image': X_test['Image'],
     'Id': predictions

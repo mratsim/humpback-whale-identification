@@ -17,21 +17,8 @@ from timeit import default_timer as timer
 ## Get the same logger from main"
 logger = logging.getLogger("humpback-whale")
 
-def lr_scheduler(optimizer, epoch, init_lr=0.01, lr_decay_epoch=7):
-    """Decay learning rate by a factor of 0.1 every lr_decay_epoch epochs."""
-    lr = init_lr * (0.1**(epoch // lr_decay_epoch))
-
-    if epoch % lr_decay_epoch == 0:
-        logger.info('LR is set to {}'.format(lr))
-
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-
-    return optimizer
-
 def train_at_epoch(epoch, train_loader, model, loss_func, optimizer, batch_size, report_freq):
     model.train() # training mode (build graph)
-    optimizer = lr_scheduler(optimizer, epoch)
     
     for batch_idx, data_target in enumerate(train_loader):
         data = data_target[0]["data"]
@@ -62,7 +49,10 @@ def train(
     snapshot_dir, run_name,
     data_parallel,
     evaluate, val_loader=None):
-  best_score = 0.
+  if evaluate:
+    best_score = 0.
+  else:
+    best_score = None
   for epoch in range(epochs):
       epoch_timer = timer()
 
@@ -95,4 +85,4 @@ def train(
       end_epoch_timer = timer()
       logger.info("#### End epoch {}, elapsed time: {}".format(epoch, end_epoch_timer - epoch_timer))
 
-  return os.path.join(snapshot_dir, run_name + '-model_best.pth')
+  return os.path.join(snapshot_dir, run_name + '-model_best.pth'), best_score
