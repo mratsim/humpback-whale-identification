@@ -36,7 +36,7 @@ def train_at_epoch(epoch, train_loader, model, loss_func, optimizer, batch_size,
 
 def snapshot(dir_path, run_name, is_best, state):
     snapshot_file = os.path.join(dir_path,
-                    run_name + '-model_best.pth')
+                    run_name + '.pth')
     if is_best:
         torch.save(state, snapshot_file)
         logger.info(f"Snapshot saved to {snapshot_file}")

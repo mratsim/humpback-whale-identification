@@ -12,7 +12,6 @@ import torch
 import logging
 import torch.nn.functional as F
 import pandas as pd
-from tqdm import tqdm
 import os
 from src.instrumentation import logspeed
 
@@ -27,7 +26,7 @@ def predict(test_loader, model, final_activation):
 
   logger.info("Starting Prediction")
   with torch.no_grad():
-    for batch_idx, data_target in enumerate(tqdm(test_loader)):
+    for batch_idx, data_target in enumerate(test_loader):
       data = data_target[0]["data"]
 
       pred = final_activation(model(data))

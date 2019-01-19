@@ -83,18 +83,18 @@ OUT_DIR = './outputs'
 NUM_THREADS = 18
 
 EPOCHS = 25
-BATCH_SIZE = 192          # This will be split onto all GPUs
-VAL_BATCH_SIZE = 256      # We can use large batches when weights are frozen
+BATCH_SIZE = 192         # This will be split onto all GPUs
+VAL_BATCH_SIZE = 768     # We can use large batches when weights are frozen
 REPORT_EVERY_N_BATCH = 5
 
-PRETRAINED = False
+PRETRAINED = True
 UNFROZE_AT_EPOCH = 3
-BATCH_FROZEN = 256        # We can use large batches when weights are frozen
+BATCH_FROZEN = 768       # We can use large batches when weights are frozen
 
 # GPU data augmentation
 # Note that it's probably better to do augmentation on CPU for compute intensive models
 # So that you can maximize the batch size and training on GPU.
-DATA_AUGMENT_USE_GPU = True
+DATA_AUGMENT_USE_GPU = False
 DATA_AUGMENT_GPU_DEVICE = 0
 
 if PRETRAINED:
@@ -113,7 +113,7 @@ CRITERION = nn.CrossEntropyLoss
 FINAL_ACTIVATION = lambda x: torch.softmax(x, dim=1)
 
 model_family = 'resnet'
-model_name = 'resnet34'
+model_name = 'resnet101'
 def gen_model_and_optimizer(data_parallel, weights = None):
   # Delay generating model, so that:
   #   - it can be collected if needed
@@ -222,7 +222,7 @@ def main_train(args, run_name, logger):
       evaluate = not args.fulldata,
       val_loader = None if args.fulldata else val_loader,
     )
-    logger.info(f"End pretraining, unfroze all weights.\n")
+    logger.info(f"End pretraining, unfreeze all weights.\n")
 
   logger.info(f"Training {model.module.__class__.__name__} with batch size {BATCH_SIZE} for {EPOCHS} epochs.")
   weights = train(
