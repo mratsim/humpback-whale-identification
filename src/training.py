@@ -17,7 +17,7 @@ from timeit import default_timer as timer
 ## Get the same logger from main"
 logger = logging.getLogger("humpback-whale")
 
-def train_at_epoch(epoch, train_loader, model, loss_func, optimizer, batch_size, report_freq):
+def train_at_epoch(epoch, train_loader, model, loss_func, optimizer, lr_scheduler, batch_size, report_freq):
     model.train() # training mode (build graph)
     
     for batch_idx, data_target in enumerate(train_loader):
@@ -29,6 +29,7 @@ def train_at_epoch(epoch, train_loader, model, loss_func, optimizer, batch_size,
         loss = loss_func(output, target)
         loss.backward()
         optimizer.step()
+        lr_scheduler.step()
         if batch_idx % report_freq == 0:
             logger.info('Train Epoch: {:03d} [{:05d}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * batch_size, train_loader._size,
@@ -48,7 +49,7 @@ def train(
     batch_size, epochs, report_freq,
     snapshot_dir, run_name,
     data_parallel,
-    evaluate, val_loader=None):
+    evaluate, lr_scheduler=None, val_loader=None):
   if evaluate:
     best_score = 0.
   else:
@@ -57,8 +58,9 @@ def train(
       epoch_timer = timer()
 
       # Train and validate
-      train_at_epoch(epoch, train_loader, model, criterion, optimizer, batch_size, report_freq)
+      train_at_epoch(epoch, train_loader, model, criterion, optimizer, lr_scheduler, batch_size, report_freq)
       train_loader.reset()
+      # TODO distinguish between lr_scheduler applied at each epochs and those applied at each iteration
 
       if evaluate:
         # Validate

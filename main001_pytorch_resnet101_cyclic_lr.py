@@ -9,9 +9,6 @@ from torch import nn, optim
 from torch.nn import DataParallel
 import torch.nn.functional as F
 
-# Nvidia Apex, fp16 and mixed precision training
-from apex.fp16_utils import *
-
 # Nvidia DALI, GPU Data Augmentation Library
 from nvidia.dali.plugin.pytorch import DALIClassificationIterator
 
@@ -32,6 +29,7 @@ from src.datafeed import *
 from src.net_classic_arch import *
 from src.training import train
 from src.prediction import predict, output
+from src.learning_rate_pr import CyclicLR
 
 # Command-line interface
 from argparse import ArgumentParser
@@ -82,12 +80,12 @@ OUT_DIR = './outputs'
 
 NUM_THREADS = 18
 
-EPOCHS = 25
-BATCH_SIZE = 192         # This will be split onto all GPUs
+EPOCHS = 45
+BATCH_SIZE = 96          # This will be split onto all GPUs
 VAL_BATCH_SIZE = 768     # We can use large batches when weights are frozen
 REPORT_EVERY_N_BATCH = 5
 
-PRETRAINED = True
+PRETRAINED = False
 UNFROZE_AT_EPOCH = 3
 BATCH_FROZEN = 768       # We can use large batches when weights are frozen
 
@@ -114,7 +112,7 @@ FINAL_ACTIVATION = lambda x: torch.softmax(x, dim=1)
 
 model_family = 'resnet'
 model_name = 'resnet101'
-def gen_model_and_optimizer(data_parallel, weights = None):
+def gen_model_and_optimizer(dataset_size, data_parallel, weights = None):
   # Delay generating model, so that:
   #   - it can be collected if needed
   #   - DataParallel doesn't causes issue when loading a saved model
@@ -128,20 +126,37 @@ def gen_model_and_optimizer(data_parallel, weights = None):
     weights = weights
   )
 
-  optimizer = optim.Adam(feature_extractor, lr = 0.01)
+  optimizer = optim.SGD(
+    feature_extractor,
+    lr = 0.02,
+    momentum = 0.09
+  )
   optimizer.add_param_group({
     'params': classifier,
-    'lr': 0.001
+    'lr': 0.002
   })
 
+  # One-cycle policy - TODO parametrize that better
+  batches_per_epoch = dataset_size / BATCH_SIZE
+  final_epochs = 5
+  step_up = int(EPOCHS * batches_per_epoch / 2 - final_epochs / 2)
+  
+  scheduler = CyclicLR(
+    optimizer,
+    base_lr = [0.02, 0.002],
+    max_lr = [0.2, 0.2],
+    step_size_up = step_up,
+    mode = 'triangular'
+  )
+  
   # Make sure if there is a reference issue we see it ASAP
   del feature_extractor
   del classifier
 
-  return model, optimizer
+  return model, optimizer, scheduler
 
 init = "pretrained" if PRETRAINED else "from-scratch"
-LOG_SUFFIX = f"{model_name}-{init}-baseline"
+LOG_SUFFIX = f"{model_name}-{init}-001-cycliclr"
 
 @logspeed
 def main_train(args, run_name, logger):
@@ -181,7 +196,7 @@ def main_train(args, run_name, logger):
     val_pipe.build()
     val_loader = DALIClassificationIterator(val_pipe, size = val_pipe.epoch_size("Datafeed"))
 
-  model, optimizer = gen_model_and_optimizer(args.dataparallel)
+  model, optimizer, scheduler = gen_model_and_optimizer(train_loader._size, args.dataparallel)
 
   num_classes = LABEL_ENCODER.classes_.size
   logger.info(f"Found {num_classes} unique classes to classify.")
@@ -220,6 +235,7 @@ def main_train(args, run_name, logger):
       run_name = run_name,
       data_parallel = args.dataparallel,
       evaluate = not args.fulldata,
+      lr_scheduler = None,
       val_loader = None if args.fulldata else val_loader,
     )
     logger.info(f"End pretraining, unfreeze all weights.\n")
@@ -234,6 +250,7 @@ def main_train(args, run_name, logger):
     run_name = run_name,
     data_parallel = args.dataparallel,
     evaluate = not args.fulldata,
+    lr_scheduler = scheduler,
     val_loader = None if args.fulldata else val_loader,
   )
   return weights
