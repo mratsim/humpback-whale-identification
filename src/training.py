@@ -29,7 +29,8 @@ def train_at_epoch(epoch, train_loader, model, loss_func, optimizer, lr_schedule
         loss = loss_func(output, target)
         loss.backward()
         optimizer.step()
-        lr_scheduler.step()
+        if lr_scheduler:
+          lr_scheduler.step()
         if batch_idx % report_freq == 0:
             logger.info('Train Epoch: {:03d} [{:05d}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * batch_size, train_loader._size,
@@ -61,7 +62,6 @@ def train(
       train_at_epoch(epoch, train_loader, model, criterion, optimizer, lr_scheduler, batch_size, report_freq)
       train_loader.reset()
       # TODO distinguish between lr_scheduler applied at each epochs and those applied at each iteration
-
       if evaluate:
         # Validate
         score, loss = validate(epoch, val_loader, model, criterion)
@@ -87,4 +87,4 @@ def train(
       end_epoch_timer = timer()
       logger.info("#### End epoch {}, elapsed time: {}".format(epoch, end_epoch_timer - epoch_timer))
 
-  return os.path.join(snapshot_dir, run_name + '-model_best.pth'), best_score
+  return os.path.join(snapshot_dir, run_name + '.pth'), best_score

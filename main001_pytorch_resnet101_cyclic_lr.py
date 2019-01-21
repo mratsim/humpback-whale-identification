@@ -81,19 +81,19 @@ OUT_DIR = './outputs'
 NUM_THREADS = 18
 
 EPOCHS = 45
-BATCH_SIZE = 96          # This will be split onto all GPUs
-VAL_BATCH_SIZE = 768     # We can use large batches when weights are frozen
+BATCH_SIZE = 112         # This will be split onto all GPUs
+VAL_BATCH_SIZE = 112     # We can use large batches when weights are frozen
 REPORT_EVERY_N_BATCH = 5
 
 PRETRAINED = False
 UNFROZE_AT_EPOCH = 3
-BATCH_FROZEN = 768       # We can use large batches when weights are frozen
+BATCH_FROZEN = 112       # We can use large batches when weights are frozen
 
 # GPU data augmentation
 # Note that it's probably better to do augmentation on CPU for compute intensive models
 # So that you can maximize the batch size and training on GPU.
-DATA_AUGMENT_USE_GPU = False
-DATA_AUGMENT_GPU_DEVICE = 0
+DATA_AUGMENT_USE_GPU = True
+DATA_AUGMENT_GPU_DEVICE = 1
 
 if PRETRAINED:
   # ImgNet normalization
@@ -256,7 +256,7 @@ def main_train(args, run_name, logger):
   return weights
 
 @logspeed
-def main_predict(model):
+def main_predict(weights, dataparallel):
   test_pipe = ValPipeline(
       img_dir=TEST_DIR,
       img_list_path=TEST_IMG_LIST,
@@ -271,6 +271,7 @@ def main_predict(model):
       )
   test_pipe.build()
   test_loader = DALIClassificationIterator(test_pipe, size = test_pipe.epoch_size("Datafeed"))
+  model, _ , _= gen_model_and_optimizer(test_loader._size, dataparallel, weights = weights)
   return predict(test_loader, model, FINAL_ACTIVATION)
 
 @logspeed
@@ -299,10 +300,9 @@ def main():
   # Load model
   logger.info(f'===> loading model for prediction: {model_weights_path}')
   checkpoint = torch.load(model_weights_path)
-  model, _ = gen_model_and_optimizer(args.dataparallel, weights = checkpoint['state_dict'])
 
   # Predict
-  pred = main_predict(model)
+  pred = main_predict(checkpoint['state_dict'], args.dataparallel)
 
   # Output
   X_test = pd.read_csv(SUBMISSION_FILE)
