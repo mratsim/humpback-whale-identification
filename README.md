@@ -13,12 +13,7 @@ And here is a sample of 10 whale's flukes we had to work with
 ![](images/0a00c7a0f.jpg)
 ![](images/0a1a0c3f7.jpg)
 ![](images/0a1aa01e8.jpg)
-![](images/0a1a6d6df.jpg)
-![](images/0a2af3c79.jpg)
-![](images/0a2b7202c.jpg)
-![](images/00a3dd76f.jpg)
-![](images/0a3e0cc22.jpg)
-![](images/0a4b8ecf9.jpg)
+![](images/0a1e6d6df.jpg)
 
 ## What you will find here
 
@@ -42,7 +37,9 @@ Lastly but not least, you will find several papers on identification tasks (comm
 Bonus: I'm pretty confident I've implemented the fastest mAP@5 function in Python + Deep Learning library.
 
 ## Papers
-### Neural Network Architectures
+
+
+### Neural Network Architectures
 
 - Learning similarity, Metric learning, Low-shot learning, One-shot learning:
     - Siamese Networks: https://www.cs.cmu.edu/~rsalakhu/papers/oneshot1.pdf
@@ -72,7 +69,7 @@ Bonus: I'm pretty confident I've implemented the fastest mAP@5 function in Pytho
 
 - Training from Scratch: https://arxiv.org/pdf/1811.08883.pdf
 
-### Loss function and optimizing directly for mAP
+### Loss function and optimizing directly for mAP
 
 - Can we do a differentiable Map@5?
 - Optimisation and Operations Research techniques
