@@ -58,8 +58,8 @@ Bonus: I'm pretty confident I've implemented the fastest mAP@5 function in Pytho
   - Dolphin ReID with metric embedded learning: https://arxiv.org/abs/1901.03662
 - Meta learning: https://openreview.net/pdf?id=rJY0-Kcll
 - Neural Turing Machine
-      - https://arxiv.org/pdf/1410.5401
-      - One shot learning: https://arxiv.org/abs/1605.06065
+  - https://arxiv.org/pdf/1410.5401
+  - One shot learning: https://arxiv.org/abs/1605.06065
 - Unsupervised pretraining: http://www.jmlr.org/papers/volume11/erhan10a/erhan10a.pdf
   - Pretraining with an autoencoder
   - Not gradient based
