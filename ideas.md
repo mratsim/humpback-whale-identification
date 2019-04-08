@@ -5,9 +5,7 @@
   Rescaling might produce artifacts, reduce a characteristic
   or distract the NN by enlarging something irrelevant like water.
 
-
-
-# NN Arch
+## NN Arch
 
 - Learning similarity, Metric learning, Low-shot learning, One-shot learning:
     - Siamese Networks: https://www.cs.cmu.edu/~rsalakhu/papers/oneshot1.pdf
@@ -26,8 +24,8 @@
   - Dolphin ReID with metric embedded learning: https://arxiv.org/abs/1901.03662
 - Meta learning: https://openreview.net/pdf?id=rJY0-Kcll
 - Neural Turing Machine
-      - https://arxiv.org/pdf/1410.5401
-      - One shot learning: https://arxiv.org/abs/1605.06065
+  - https://arxiv.org/pdf/1410.5401
+  - One shot learning: https://arxiv.org/abs/1605.06065
 - Unsupervised pretraining: http://www.jmlr.org/papers/volume11/erhan10a/erhan10a.pdf
   - Pretraining with an autoencoder
   - Not gradient based
@@ -37,7 +35,7 @@
 
 - Training from Scratch: https://arxiv.org/pdf/1811.08883.pdf
 
-# Loss function and optimizing directly for MAP
+## Loss function and optimizing directly for MAP
 
 - Can we do a differentiable Map@5?
 - Optimisation and Operations Research techniques
@@ -58,14 +56,14 @@
 - A Maximal Figure-of-Merit Learning Approach to Maximizing Mean Average Precision with Deep Neural Network Based Classifiers
   http://www.mirlab.org/conference_papers/international_conference/ICASSP%202014/papers/p4536-li.pdf
 
-# Learning rate
+## Learning rate
 
   - One-cycle Policy: https://arxiv.org/abs/1506.01186
   - Super convergence: https://arxiv.org/pdf/1708.07120.pdf and https://github.com/lnsmith54/super-convergence
   - SGDR Stochastic gradient descent with restart: sudden increase of LR to hop out of local minima
     https://arxiv.org/pdf/1608.03983.pdf
 
-# Leaks
+## Leaks
 
 As always, your usual image leak ...
 
